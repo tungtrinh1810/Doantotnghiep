@@ -1,0 +1,1136 @@
+package com.droiduino.bluetoothconn;
+
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
+
+import android.annotation.SuppressLint;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothSocket;
+import android.content.Intent;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Message;
+import android.util.Log;
+import android.view.View;
+import android.widget.Button;
+import android.widget.ProgressBar;
+import android.widget.TextView;
+import android.graphics.Color;
+import android.widget.Toast;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.UUID;
+
+import static android.content.ContentValues.TAG;
+
+public class MainActivity extends AppCompatActivity {
+
+    private String deviceName = null;
+    private Boolean stateM1 = false;
+    //private boolean stateM2 = false;
+    private int dem,dem2, dem3;
+
+    private String deviceAddress;
+    public static Handler handler;
+    public static BluetoothSocket mmSocket;
+    public static ConnectedThread connectedThread;
+    public static CreateConnectThread createConnectThread;
+    private InputStream mmInStream;
+
+    private final static int CONNECTING_STATUS = 1; // used in bluetooth handler to identify message status
+    private final static int MESSAGE_READ = 2; // used in bluetooth handler to identify message update
+
+    TextView tV10,tV7,tV8;
+    Button bR,bA,bB,bC, bD;
+
+    // Các biến thành viên khác của lớp MainActivity
+
+    // Getter cho stateM1
+    public synchronized Boolean getStateM1() {
+        return stateM1;
+    }
+
+    // Setter cho stateM1
+    public synchronized void setStateM1(Boolean stateM1) {
+        this.stateM1 = stateM1;
+    }
+
+    // Getter cho dem
+    public synchronized int getDem() {
+        return dem;
+    }
+
+    // Setter cho dem
+    public synchronized void setDem(int dem) {
+        this.dem = dem;
+    }
+
+    public synchronized  int getDem2() { return dem2;}
+    public synchronized void setDem2(int dem2)
+    {
+        this.dem2= dem2;
+    }
+
+    public synchronized int getDem3() {return dem3;}
+    public synchronized void setDem3(int dem3)
+    {
+        this.dem3 = dem3;
+    }
+    Boolean currentState = getStateM1();
+    int currentDem = getDem();
+    int cudem2 = getDem2();
+    int cudem3 = getDem3();
+    @SuppressLint("MissingInflatedId")
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+
+
+        // UI Initialization
+        final Button buttonConnect = findViewById(R.id.buttonConnect);
+        final Toolbar toolbar = findViewById(R.id.toolbar);
+        final ProgressBar progressBar = findViewById(R.id.progressBar);
+        progressBar.setVisibility(View.GONE);
+        final Button buttonToggle = findViewById(R.id.buttonToggle);
+        buttonToggle.setEnabled(false);
+        final Button btDevice2 = findViewById(R.id.BtDevice2);
+        btDevice2.setEnabled(false);
+        final Button mode1 = findViewById(R.id.button3);
+        mode1.setEnabled(false);
+        final Button mode2 = findViewById(R.id.button4);
+        mode2.setEnabled(false);
+        final Button mode3 = findViewById(R.id.button5);
+        mode3.setEnabled(false);
+        tV10 =(TextView) findViewById(R.id.tV10);
+        tV7 = (TextView) findViewById(R.id.tV7) ;
+        tV8 = (TextView) findViewById(R.id.tV8) ;
+        bR= (Button) findViewById(R.id.bR);
+        bC= (Button) findViewById(R.id.bC);
+        bD= (Button) findViewById(R.id.bD);
+        // b3 = (Button) findViewById(R.id.b3);
+        bR.setEnabled(false);
+        bC.setEnabled(false);
+        bD.setEnabled(false);
+        //b3.setEnabled(false);
+        // If a bluetooth device has been selected from SelectDeviceActivity
+        deviceName = getIntent().getStringExtra("deviceName");
+        if (deviceName != null){
+            // Get the device address to make BT Connection
+            deviceAddress = getIntent().getStringExtra("deviceAddress");
+            // Show progree and connection status
+            toolbar.setSubtitle("Đang kết nối tới " + deviceName + "...");
+            progressBar.setVisibility(View.VISIBLE);
+            buttonConnect.setEnabled(false);
+
+         
+            BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+            createConnectThread = new CreateConnectThread(bluetoothAdapter,deviceAddress,buttonToggle,btDevice2,mode1,mode2,mode3,tV10, dem, stateM1);
+            createConnectThread.start();
+        }
+        
+        handler = new Handler(Looper.getMainLooper()) {
+            @Override
+            public void handleMessage(Message msg){
+                switch (msg.what){
+                    case CONNECTING_STATUS:
+                        switch(msg.arg1){
+                            case 1:
+                                toolbar.setSubtitle("Đã kết nối tới " + deviceName);
+                                progressBar.setVisibility(View.GONE);
+                                buttonConnect.setEnabled(true);
+                                buttonToggle.setEnabled(true);
+                                btDevice2.setEnabled(true);
+                                mode1.setEnabled(true);
+                                mode2.setEnabled(true);
+                                mode3.setEnabled(true);
+                                bR.setEnabled(true);
+                                mode1.setBackgroundColor(Color.RED);
+                                mode2.setBackgroundColor(Color.RED);
+                                mode3.setBackgroundColor(Color.RED);
+                                break;
+                            case -1:
+                                toolbar.setSubtitle("Kết nối tới thiết bị thất bại");
+                                progressBar.setVisibility(View.GONE);
+                                buttonConnect.setEnabled(true);
+                                break;
+                        }
+                        break;
+
+                }
+            }
+        };
+        
+        buttonConnect.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                // Move to adapter list
+                Intent intent = new Intent(MainActivity.this, SelectDeviceActivity.class);
+                startActivity(intent);
+            }
+        });
+        
+        buttonToggle.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                String cmdText = null;
+                String btnState = buttonToggle.getText().toString().toLowerCase();
+                switch (btnState){
+                    case "turn on":
+                        buttonToggle.setText("Turn Off");
+                        // Command to turn on LED on Arduino. Must match with the command in Arduino code
+                        tV7.setText("On");
+                        cmdText = "a";
+                        break;
+                    case "turn off":
+                        buttonToggle.setText("Turn On");
+                        // Command to turn off LED on Arduino. Must match with the command in Arduino code
+                        tV7.setText("Off");
+                        cmdText = "b";
+                        break;
+                }
+                // Send command to Arduino board
+                connectedThread.write(cmdText);
+            }
+        });
+
+        btDevice2.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                String cmdText = null;
+                String btnState = btDevice2.getText().toString().toLowerCase();
+                switch (btnState){
+                    case "turn on":
+                        btDevice2.setText("Turn Off");
+                        // Command to turn on LED on Arduino. Must match with the command in Arduino code
+                        cmdText = "c";
+                        bC.setEnabled(true);
+                        bD.setEnabled(true);
+                        cudem3=2;
+                        tV8.setText(Integer.toString(cudem3));
+                        break;
+                    case "turn off":
+                        btDevice2.setText("Turn On");
+                        // Command to turn off LED on Arduino. Must match with the command in Arduino code
+                        bC.setEnabled(false);
+                        bD.setEnabled(false);
+                        bC.setBackgroundColor(Color.RED);
+                        bD.setBackgroundColor(Color.RED);
+                        cmdText = "d";
+                        tV8.setText("Off");
+                        break;
+                }
+
+                connectedThread.write(cmdText);
+            }
+        });
+
+        mode1.setOnClickListener(new View.OnClickListener() {
+            @Override
+
+            public void onClick(View view) {
+                //String TextV1 = tV10.getText().toString().toLowerCase();
+                if(currentState==false )
+                {
+                    mode1.setBackgroundColor(Color.parseColor("#41B06E"));
+                    //mode2.setBackgroundColor(Color.RED);
+                    //mode3.setBackgroundColor(Color.RED);
+                    mode2.setEnabled(true);
+                    mode3.setEnabled(true);
+                    String cmdText = "8";
+                    connectedThread.write(cmdText);
+                    currentState=true;
+                    tV10.setText("Normal");
+                }
+                else if (currentState==true )
+                {
+                    mode1.setBackgroundColor(Color.RED);
+                    mode2.setBackgroundColor(Color.RED);
+                    mode3.setBackgroundColor(Color.RED);
+                    mode2.setEnabled(false);
+                    mode3.setEnabled(false);
+                    String cmdText = "9";
+                    connectedThread.write(cmdText);
+                    currentState=false;
+                    currentDem=0;
+                    tV10.setText("Off");
+                }
+            }
+        });
+
+        mode2.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                currentDem--;
+
+                if(currentDem ==2)
+                {
+                    mode2.setBackgroundColor(Color.parseColor("#F0D13A"));
+                    tV10.setText(Integer.toString(currentDem));
+                } else if (currentDem ==1)
+                {
+                    mode2.setBackgroundColor(Color.parseColor("#F0D13A"));
+                    tV10.setText(Integer.toString(currentDem));
+                }
+                else if (currentDem==0)
+                {
+
+                    mode2.setBackgroundColor(Color.parseColor("#F0D13A"));
+                    tV10.setText("Normal");
+                }
+                else
+                {
+                    currentDem=0;
+                    mode2.setBackgroundColor(Color.parseColor("#F0D13A"));
+                    tV10.setText("Normal");
+                    Toast.makeText(MainActivity.this, "Level is MINNNN", Toast.LENGTH_SHORT).show();
+                }
+
+                String cmdText = "1";
+                connectedThread.write(cmdText);
+            }
+        });
+
+        mode3.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                currentDem++;
+
+                if(currentDem ==1)
+                {
+                    mode3.setBackgroundColor(Color.parseColor("#247DC5"));
+                    tV10.setText(Integer.toString(currentDem));
+                } else if (currentDem ==2)
+                {
+                    mode3.setBackgroundColor(Color.parseColor("#247DC5"));
+                    tV10.setText(Integer.toString(currentDem));
+                }
+                else if (currentDem==3)
+                {
+                    mode3.setBackgroundColor(Color.parseColor("#247DC5"));
+                    tV10.setText(Integer.toString(currentDem));
+                }
+                else
+                {
+                    currentDem=3;
+                    mode3.setBackgroundColor(Color.parseColor("#247DC5"));
+                    tV10.setText(Integer.toString(currentDem));
+                    Toast.makeText(MainActivity.this, "Level is MAXXXX", Toast.LENGTH_SHORT).show();
+                }
+                String cmdText = "2";
+                connectedThread.write(cmdText);
+            }
+        });
+        bR.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+
+                String cmdText = "s";
+                connectedThread.write(cmdText);
+                // Đọc dữ liệu từ InputStream của Bluetooth và xử lý
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        connectedThread.readData();
+                    }
+                }).start();
+            }
+        });
+
+        bC.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                cudem3--;
+          
+                if (cudem3 ==1)
+                {
+                    bC.setBackgroundColor(Color.parseColor("#F0D13A"));
+                    tV8.setText(Integer.toString(cudem3));
+                }
+                else if (cudem3==0)
+                {
+                   bC.setBackgroundColor(Color.parseColor("#F0D13A"));
+                    tV8.setText(Integer.toString(cudem3));
+                    Toast.makeText(MainActivity.this, "Level is MINNNN", Toast.LENGTH_SHORT).show();
+                }
+                else
+                {
+                    cudem3=0;
+                    bC.setBackgroundColor(Color.parseColor("#F0D13A"));
+                    tV8.setText(Integer.toString(cudem3));
+                    Toast.makeText(MainActivity.this, "Level is MINNNN", Toast.LENGTH_SHORT).show();
+                }
+                String cmdText = "3";
+                connectedThread.write(cmdText);
+            }
+
+        });
+
+        bD.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                cudem3++;
+                if(cudem3 ==1)
+                {
+                    bD.setBackgroundColor(Color.parseColor("#247DC5"));
+                    tV8.setText(Integer.toString(cudem3));
+                } else if (cudem3 ==2)
+                {
+                    bD.setBackgroundColor(Color.parseColor("#247DC5"));
+                    tV8.setText(Integer.toString(cudem3));
+                }
+                else
+                {
+                    cudem3=2;
+                    bD.setBackgroundColor(Color.parseColor("#247DC5"));
+                    tV8.setText(Integer.toString(cudem3));
+                    Toast.makeText(MainActivity.this, "Level is MAXXXX", Toast.LENGTH_SHORT).show();
+                }
+                String cmdText = "4";
+                connectedThread.write(cmdText);
+            }
+
+
+        });
+
+    }
+
+    /* ============================ Thread to Create Bluetooth Connection =================================== */
+    public class CreateConnectThread extends Thread {
+        private final Button buttonToggle;
+        private final Button btDevice2;
+        final Button mode1;
+        final Button mode2;
+        final Button mode3;
+        final TextView tV10;
+        final Integer dem;
+        final Boolean stateM1;
+
+
+        public CreateConnectThread(BluetoothAdapter bluetoothAdapter, String address,Button buttonToggle, Button btDevice2, Button mode1, Button mode2, Button mode3, TextView tV10, Integer dem, Boolean stateM1 ) {
+            /*
+            Use a temporary object that is later assigned to mmSocket
+            because mmSocket is final.
+             */
+            this.buttonToggle = buttonToggle;
+            this.btDevice2 = btDevice2;
+            this.mode1 = mode1;
+            this.mode2 = mode2;
+            this.mode3 = mode3;
+            this.tV10 =  tV10;
+            this.dem = dem;
+            this.stateM1=stateM1;
+
+            BluetoothDevice bluetoothDevice = bluetoothAdapter.getRemoteDevice(address);
+            BluetoothSocket tmp = null;
+            UUID uuid = bluetoothDevice.getUuids()[0].getUuid();
+
+            try {
+                tmp = bluetoothDevice.createInsecureRfcommSocketToServiceRecord(uuid);
+
+            } catch (IOException e) {
+                Log.e(TAG, "Socket's create() method failed", e);
+            }
+            mmSocket = tmp;
+        }
+
+        public void run() {
+            // Cancel discovery because it otherwise slows down the connection.
+            BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+            bluetoothAdapter.cancelDiscovery();
+            try {
+                // Connect to the remote device through the socket. This call blocks
+                // until it succeeds or throws an exception.
+                mmSocket.connect();
+                Log.e("Status", "Device connected");
+                handler.obtainMessage(CONNECTING_STATUS, 1, -1).sendToTarget();
+            } catch (IOException connectException) {
+                // Unable to connect; close the socket and return.
+                try {
+                    mmSocket.close();
+                    Log.e("Status", "Cannot connect to device");
+                    handler.obtainMessage(CONNECTING_STATUS, -1, -1).sendToTarget();
+                } catch (IOException closeException) {
+                    Log.e(TAG, "Could not close the client socket", closeException);
+                }
+                return;
+            }
+
+            // The connection attempt succeeded. Perform work associated with
+            // the connection in a separate thread.
+            connectedThread = new ConnectedThread(mmSocket, buttonToggle, btDevice2,mode1,mode2,mode3,tV10,dem, stateM1 );
+            connectedThread.start();
+        }
+
+        // Closes the client socket and causes the thread to finish.
+        public void cancel() {
+            try {
+                mmSocket.close();
+            } catch (IOException e) {
+                Log.e(TAG, "Could not close the client socket", e);
+            }
+        }
+    }
+
+    /* =============================== Thread for Data Transfer =========================================== */
+    public class ConnectedThread extends Thread {
+        private final BluetoothSocket mmSocket;
+        private final InputStream mmInStream;
+        private final OutputStream mmOutStream;
+        private final Button buttonToggle;
+        private final Button btDevice2;
+        private final Button mode1;
+        private final Button mode2;
+        private final Button mode3;
+        private final TextView tV10 ;
+        private Integer dem ;
+        private Boolean stateM1;
+
+
+
+        private boolean isTurnedOn = false;
+        private boolean isTurnedOn1 = false;
+        
+            public ConnectedThread(BluetoothSocket socket, Button toggleButton, Button btDevice2, Button mode1, Button mode2, Button mode3, TextView tV10, Integer dem, Boolean stateM1 ) {
+            mmSocket = socket;
+            this.btDevice2 = btDevice2;
+            InputStream tmpIn = null;
+            OutputStream tmpOut = null;
+            buttonToggle = toggleButton;
+            this.mode1 = mode1;
+            this.mode2 = mode2;
+            this.mode3 = mode3;
+            this.tV10 = tV10;
+            this.dem = dem ;
+            int dem1= 0;
+            this.stateM1= stateM1;
+
+            // Get the input and output streams, using temp objects because
+            // member streams are final
+            try {
+                tmpIn = socket.getInputStream();
+                tmpOut = socket.getOutputStream();
+
+            } catch (IOException e) { }
+
+
+            mmInStream = tmpIn;
+            mmOutStream = tmpOut;
+        }
+
+        public void run()
+        {
+            byte[] buffer = new byte[1024];  // buffer store for the stream
+            int bytes = 0; // bytes returned from read()
+            // Keep listening to the InputStream until an exception occurs
+            while (true) {
+                try {
+                    /*
+                    Read from the InputStream from Arduino until termination character is reached.
+                    Then send the whole String message to GUI Handler.
+                     */
+                    buffer[bytes] = (byte) mmInStream.read();
+                    Log.d("Arduino Message", "Received character: " + (char) buffer[bytes]);
+                    String readMessage;
+                    if (buffer[bytes] == 'e' ) { // Check if 'e' is received
+                        //if(isTurnedOn == false ){
+                        //isTurnedOn = true;
+                        Log.d("Arduino Message", "Received character 'e'");
+                        // Update the UI by changing the text of buttonToggle
+                        if (buttonToggle != null) {
+                            buttonToggle.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    buttonToggle.setText("Turn Off");
+                                    tV7.setText("On");
+                                }
+
+                            });
+                        } 
+                    }
+                    else if (buffer[bytes] == 'f') {
+                        Log.d("Arduino Message", "Received character 'f'");
+                        if (buttonToggle != null) {
+                                buttonToggle.post(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        buttonToggle.setText("Turn On");
+                                        tV7.setText("Off");
+                                    }
+                                });
+                            }
+                    } else if (buffer[bytes] == 'g' ) {
+
+                        Log.d("Arduino Message", "Received character 'g'");
+                        // Update the UI by changing the text of buttonToggle
+                        if (btDevice2 != null) {
+                            btDevice2.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    cudem3=2;
+                                    btDevice2.setText("Turn Off");
+                                    bD.setEnabled(true);
+                                    bC.setEnabled(true);
+                                    tV8.setText(Integer.toString(cudem3));
+                                }
+                            });
+
+                        }
+                    }
+                    else if (buffer[bytes] == 'h' ) {
+
+                        Log.d("Arduino Message", "Received character 'h'");
+                           // isTurnedOn1 = false;
+                            if (btDevice2 != null) {
+                                btDevice2.post(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        btDevice2.setText("Turn On");
+                                        bD.setEnabled(false);
+                                        bC.setEnabled(false);
+                                        tV8.setText("Off");
+                                    }
+                                });
+
+                        }
+                    }
+                    else if (buffer[bytes] == 'v' )
+                    {
+                        cudem3= cudem3+1;
+                        Log.d("Arduino Message", "Received character 'v'/ dem = " + currentDem);
+                        // isTurnedOn1 = false;
+                        if (bD != null)
+                        {
+
+                            if (cudem3 == 1)
+                            {
+                                //mode3.post(new Runnable()
+                                runOnUiThread(new Runnable() {
+
+                                    @Override
+                                    public void run()
+                                    {
+                                        bD.setBackgroundColor(Color.parseColor("#247DC5"));
+                                        tV8.setText(Integer.toString(cudem3));
+                                    }
+                                });
+                            } else if (cudem3==2) {
+                                //mode3.post(new Runnable()
+                                runOnUiThread(new Runnable()
+                                {
+                                    @Override
+                                    public void run()
+                                    {
+                                        bD.setBackgroundColor(Color.parseColor("#247DC5"));
+                                        tV8.setText(Integer.toString(cudem3));
+                                    }
+                                });
+                            }
+                            else
+                            {
+                                runOnUiThread(new Runnable()
+                                {
+                                    @Override
+                                    public void run()
+                                    {
+                                        bD.setBackgroundColor(Color.parseColor("#247DC5"));
+                                        Toast.makeText(MainActivity.this, "Maxxxx", Toast.LENGTH_SHORT).show();
+                                    }
+                                });
+                                cudem3=2;
+                            }
+
+                        }
+                    }
+                    else if (buffer[bytes] == 'l' ) {
+                        cudem3 = cudem3 - 1;
+                        Log.d("Arduino Message", "Received character 'x'/ dem = " + cudem3);
+                        // isTurnedOn1 = false;
+                        if (bC != null) {
+                        if (cudem3 == 1) {
+                                //mode2.post(new Runnable() {
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        bC.setBackgroundColor(Color.parseColor("#F0D13A"));
+                                        tV8.setText(Integer.toString(cudem3));
+                                    }
+                                });
+                            } 
+                        else if (cudem3 == 0) {
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        bC.setBackgroundColor(Color.parseColor("#F0D13A"));
+                                        tV8.setText(Integer.toString(cudem3));
+                                        // mode2.setEnabled(true);
+                                        // mode3.setEnabled(true);
+
+                                    }
+                                });
+                            } 
+                        else  
+                        {
+
+                                //mode2.post(new Runnable() {
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        bC.setBackgroundColor(Color.parseColor("#F0D13A"));
+                                        // tV10.setText("Normal");
+                                        //  mode2.setEnabled(true);
+                                        // mode3.setEnabled(true);
+                                        Toast.makeText(MainActivity.this, "Minnnn", Toast.LENGTH_SHORT).show();
+                                    }
+                                });
+                                cudem3=0;
+                            }
+                        }
+                    }
+
+                    else if (buffer[bytes] == 'm' ) 
+                    {
+                        Log.d("Arduino Message", "Received character 'm'");
+                        // isTurnedOn1 = false;
+                        if (currentState != null) {
+                            runOnUiThread(new Runnable()
+                            {
+                                @Override
+                                public void run() {
+                                    mode1.setBackgroundColor(Color.parseColor("#41B06E"));
+                                    tV10.setText("Normal");
+                                    mode2.setEnabled(true);
+                                    mode3.setEnabled(true);
+                                    currentState=true;
+
+                                }
+                            });
+
+                        }
+                    }
+                    else if (buffer[bytes] == 't' )
+                    {
+
+                        Log.d("Arduino Message", "Received character 't11'");
+                        // isTurnedOn1 = false;
+                        if (currentState != null) {
+                            runOnUiThread(new Runnable()
+                            {
+                                @Override
+                                public void run() {
+                                    mode1.setBackgroundColor(Color.RED);
+                                    tV10.setText("Off");
+                                    mode2.setBackgroundColor(Color.RED);
+                                    mode3.setBackgroundColor(Color.RED);
+                                    mode2.setEnabled(false);
+                                    mode3.setEnabled(false);
+                                    currentDem=0;
+                                    currentState=false;
+                                }
+                            });
+
+                        }
+                    }
+                    else if (buffer[bytes] == 'y' )
+                    {
+                        currentDem= currentDem+1;
+                        Log.d("Arduino Message", "Received character 'y'/ dem = " + currentDem);
+                        // isTurnedOn1 = false;
+                        if (mode3 != null)
+                        {
+
+                            if (currentDem == 1)
+                            {
+                                //mode3.post(new Runnable()
+                                runOnUiThread(new Runnable() {
+
+                                    @Override
+                                    public void run() 
+                                    {
+                                        mode3.setBackgroundColor(Color.parseColor("#247DC5"));
+                                        tV10.setText(Integer.toString(currentDem));
+                                    }
+                                });
+                            } 
+                            else if (currentDem==2)
+                            {
+                                //mode3.post(new Runnable()
+                                runOnUiThread(new Runnable()
+                                {
+                                    @Override
+                                    public void run()
+                                    {
+                                        mode3.setBackgroundColor(Color.parseColor("#247DC5"));
+                                        tV10.setText(Integer.toString(currentDem));
+                                        //mode2.setEnabled(true);
+                                       // mode3.setEnabled(true);
+
+                                    }
+                                });
+                            }
+                            else if (currentDem==3) {
+                                //mode3.post(new Runnable()
+                                runOnUiThread(new Runnable()
+                                {
+                                    @Override
+                                    public void run()
+                                    {
+                                        mode3.setBackgroundColor(Color.parseColor("#247DC5"));
+                                        tV10.setText(Integer.toString(currentDem));
+                                        //mode2.setEnabled(true);
+                                        //mode3.setEnabled(true);
+
+                                    }
+                                });
+                            }
+                            else
+                            {
+
+                                //mode3.post(new Runnable()
+                                runOnUiThread(new Runnable()
+                                {
+                                    @Override
+                                    public void run()
+                                    {
+                                        mode3.setBackgroundColor(Color.parseColor("#247DC5"));
+                                        //tV10.setText(dem);
+                                        //mode2.setEnabled(true);
+                                        //mode3.setEnabled(true);
+                                        Toast.makeText(MainActivity.this, "Maxxxx", Toast.LENGTH_SHORT).show();
+                                    }
+                                });
+                                currentDem=2;
+                            }
+
+                        }
+                    }
+                    else if (buffer[bytes] == 'x' )
+                    {
+                        currentDem = currentDem - 1;
+                        Log.d("Arduino Message", "Received character 'x'/ dem = " + currentDem);
+                        // isTurnedOn1 = false;
+                        if (mode2 != null) {
+
+                            if (currentDem == 2) {
+                               // mode2.post(new Runnable() {
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        mode2.setBackgroundColor(Color.parseColor("#F0D13A"));
+                                        tV10.setText(Integer.toString(currentDem));
+                                        // mode2.setEnabled(true);
+                                        // mode3.setEnabled(true);
+
+                                    }
+                                });
+
+                            } 
+                            else if (currentDem == 1) {
+                                //mode2.post(new Runnable() {
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        mode2.setBackgroundColor(Color.parseColor("#F0D13A"));
+                                        tV10.setText(Integer.toString(currentDem));
+                                      //  mode2.setEnabled(true);
+                                      //  mode3.setEnabled(true);
+
+                                    }
+                                });
+                            }
+                            else if (currentDem == 0) {
+                                //mode2.post(new Runnable() {
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        mode2.setBackgroundColor(Color.parseColor("#F0D13A"));
+                                        tV10.setText("Normal");
+                                       // mode2.setEnabled(true);
+                                       // mode3.setEnabled(true);
+
+                                    }
+                                });
+                            }
+                            else  
+                            {
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        mode2.setBackgroundColor(Color.parseColor("#F0D13A"));
+                                       // tV10.setText("Normal");
+                                      //  mode2.setEnabled(true);
+                                       // mode3.setEnabled(true);
+                                        Toast.makeText(MainActivity.this, "Minnnn", Toast.LENGTH_SHORT).show();
+                                    }
+                                });
+                                currentDem=1;
+                            }
+                        }
+                    }
+
+                    if (buffer[bytes] == '\n')
+                    {
+                        readMessage = new String(buffer,0,bytes);
+                        Log.e("Arduino Message",readMessage);
+                        handler.obtainMessage(MESSAGE_READ,readMessage).sendToTarget();
+                        bytes = 0;
+                        buffer = new byte[1024];
+                    } else {
+                        bytes++;
+                    }
+                }
+                catch (IOException e) 
+                {
+                    e.printStackTrace();
+                    break;
+                }
+            }
+        }
+        public void readData()
+        {
+            byte[] buffer = new byte[1024];
+            int bytes=0;
+            //Log.d("InputStream Status", "Available bytes in mmInStream: " + mmInStream);
+            while(true)
+            {
+                try 
+                {
+                    if (mmInStream.available() > 0) {
+                        // Đọc dữ liệu từ InputStream
+
+                        // Chuyển đổi dữ liệu thành chuỗi
+                        String readMessage = new String(buffer, 0, bytes);
+                        // Xử lý dữ liệu đọc được tại đây
+
+                        processData(readMessage);
+
+                    }
+                }
+                    catch (IOException e)
+                    {
+                    e.printStackTrace();
+                    break;
+                }
+            }
+        }
+        private void processData(String data) 
+        {
+            // Xử lý dữ liệu ở đây
+            //while (true) {
+            // HashMap<String, Runnable> actions = new HashMap<>();
+            switch (data) {
+                //if (data.equals("e")) {
+                case "e":
+                    // Nếu nhận được kí tự 'e' từ STM, thực hiện hành động tương ứng
+                    // Ví dụ: gửi thông điệp đến UI Handler để cập nhật giao diện người dùng
+                    if (buttonToggle != null) {
+                        buttonToggle.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                buttonToggle.setText("Turn Off");
+                                tV7.setText("On");
+                            }
+                        });
+                    }
+
+                 break;
+                    // Xử lý các trường hợp khác tại đây
+                case "f":
+                    if (buttonToggle != null) {
+                        buttonToggle.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                buttonToggle.setText("Turn On");
+                                tV7.setText("Off");
+                            }
+                        });
+                    }
+                    //handler.obtainMessage(MESSAGE_READ, data).sendToTarget();
+                break;
+                //else if (data.equals("g")) {
+                case "g":
+                    // Xử lý các trường hợp khác tại đây
+                    if (btDevice2 != null) {
+                        btDevice2.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                btDevice2.setText("Turn Off");
+                            }
+                        });
+                    }
+                    // handler.obtainMessage(MESSAGE_READ, data).sendToTarget();
+                break;
+                 //else if (data.equals("h")) {
+                 case "h":
+                    // Xử lý các trường hợp khác tại đây
+                    if (btDevice2 != null) {
+                        btDevice2.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                btDevice2.setText("Turn On");
+                            }
+                        });
+                    }
+                    // handler.obtainMessage(MESSAGE_READ, data).sendToTarget();
+                break;
+                case "i":
+                    Log.d("Arduino Message", "Received character 'ili' ");
+                    if (tV8 !=null)
+                    {
+                        tV8.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                tV8.setText("1");
+                            }
+                        });
+                    }
+                case "m":
+                    readData();
+                    String stute = data;
+                    if(stute=="q")
+                    {
+                        Log.d("Arduino Message", "Received character both: 'm&q'");
+                        currentDem = 1;
+                        // isTurnedOn1 = false;
+                        //if (mode1 != null) {
+                        //mode1.post(new Runnable() {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                mode1.setBackgroundColor(Color.parseColor("#41B06E"));
+                                tV10.setText(Integer.toString(currentDem));
+                                mode2.setEnabled(true);
+                                mode3.setEnabled(true);
+                                //mode2.setBackgroundColor(Color.parseColor("#247DC5"));
+                                //mode3.setBackgroundColor(Color.parseColor("#F0D13A"));
+                            }
+                        });
+                    }
+                    else
+                    {
+                        Log.d("Arduino Message", "Received character 'm'");
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+
+                            currentState = true;
+                            mode1.setBackgroundColor(Color.parseColor("#41B06E"));
+                            tV10.setText("1");
+                            mode2.setEnabled(true);
+                            mode3.setEnabled(true);
+
+                        }
+
+                        ;
+                    });
+                    }
+                break;
+                case "t":
+                    Log.d("Arduino Message", "Received character 't'");
+                    // isTurnedOn1 = false;
+                    //if (mode1 != null) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            mode1.setBackgroundColor(Color.RED);
+                            tV10.setText("Off");
+                            mode2.setEnabled(false);
+                            mode3.setEnabled(false);
+                            currentState = false;
+                        }
+                    });
+                    
+                break;
+                case "q":
+                    Log.d("Arduino Message", "Received character both: 'm&q'");
+                    currentDem = 1;
+                    // isTurnedOn1 = false;
+                    //if (mode1 != null) {
+                    //mode1.post(new Runnable() {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            mode1.setBackgroundColor(Color.parseColor("#41B06E"));
+                            tV10.setText(Integer.toString(currentDem));
+                            mode2.setEnabled(true);
+                            mode3.setEnabled(true);
+                            //mode2.setBackgroundColor(Color.parseColor("#247DC5"));
+                            //mode3.setBackgroundColor(Color.parseColor("#F0D13A"));
+                        }
+                    });
+
+                    
+                break;
+                
+                case"r":
+                    currentDem = 2;
+                    Log.d("Arduino Message", "Received character both 'm&r'");
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            mode1.setBackgroundColor(Color.parseColor("#41B06E"));
+                            tV10.setText(Integer.toString(currentDem));
+                            mode2.setEnabled(true);
+                            mode3.setEnabled(true);
+                        }
+                    });
+                    
+                break;
+                case "s":
+                    currentDem = 3;
+                    Log.d("Arduino Message", "Received character 'm&s'");
+                   
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            mode1.setBackgroundColor(Color.RED);
+                            tV10.setText(Integer.toString(currentDem));
+                            mode2.setEnabled(true);
+                            mode3.setEnabled(true);
+                        }
+                    });
+                    
+                break;
+            }
+        }
+
+
+
+        /* Call this from the main activity to send data to the remote device */
+        public void write(String input) {
+            byte[] bytes = input.getBytes(); //converts entered String into bytes
+            try {
+                mmOutStream.write(bytes);
+            } catch (IOException e) {
+                Log.e("Send Error","Unable to send message",e);
+            }
+        }
+
+        /* Call this from the main activity to shutdown the connection */
+        public void cancel() {
+            try {
+                mmSocket.close();
+            } catch (IOException e) { }
+        }
+
+
+        }
+
+    /* ============================ Terminate Connection at BackPress ====================== */
+    @Override
+    public void onBackPressed() {
+        // Terminate Bluetooth Connection and close app
+        if (createConnectThread != null){
+            createConnectThread.cancel();
+        }
+        Intent a = new Intent(Intent.ACTION_MAIN);
+        a.addCategory(Intent.CATEGORY_HOME);
+        a.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(a);
+    }
+}
